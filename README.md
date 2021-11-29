@@ -1,6 +1,6 @@
 # Work In Process - TinaFace(2021)
-- [Paper](https://arxiv.org/pdf/2011.13183.pdf)
-- Face Detection with TensorFlow
+- Here is the [Paper](https://arxiv.org/pdf/2011.13183.pdf) of the model
+- I implement this model with TensorFlow
 
 
 # Setup
@@ -8,7 +8,7 @@
 
 
 # Dataset
-- [WIDER FACE dataset](http://shuoyang1213.me/WIDERFACE/)
+- My dataset is a small part of [WIDER FACE dataset](http://shuoyang1213.me/WIDERFACE/)
 
 
 # Model Architecture

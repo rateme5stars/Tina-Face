@@ -9,7 +9,7 @@
 - [WIDER FACE dataset](http://shuoyang1213.me/WIDERFACE/)
 
 # Model Architecture
-[image](assets/model.png)
+![image](assets/model.png)
 
 # Training 
 - Working on

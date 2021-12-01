@@ -1,7 +1,5 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.framework.ops import init_scope
-from tensorflow.python.ops.gen_math_ops import imag
 
 class TargetAssigner:
     def __init__(self):

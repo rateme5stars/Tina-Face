@@ -24,7 +24,7 @@
 
     - I simplify model when compare with model architecture in paper by reducing 7 levels to 5 levels in Resnet50. The deeper Resnet50 is the better model can detect close face. This is the first version so I will update model later. 
 
-- Target Assigner: Transform raw image with bounding box coordinates to 3 heads
+- Target Assigner: Transform raw image with bounding box coordinates to heads
     - Architecture of head for each level:
         - Classification head
         - Regression head

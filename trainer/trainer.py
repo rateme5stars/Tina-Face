@@ -1,5 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
+import tensorflow_addons as tfa
+
 
 class Trainer:
     """
@@ -13,16 +15,32 @@ class Trainer:
     - validation/test step
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, batchsize, epochs, alpha, gamma, w1, w2, w3,  **kwargs):
+        self.batchsize = batchsize
+        self.epochs = epochs
+
+        # for classification loss
+        self.alpha = alpha
+        self.gamma = gamma
+
+        # for total loss
+        self.w1 = w1
+        self.w2 = w2
+        self.w3 = w3
+    
+    def classification_loss(self):
         pass
-         
 
+    def regression_loss(self):
+        pass
 
-"""
-The losses of classification, regression and IoU
-prediction are focal loss, DIoU loss and cross-entropy loss,
-respectively.
-"""
+    def iouaware_loss(self):
+        pass
+
+    
+    def total_loss(self):
+        pass
+
 
 
 """

@@ -7,11 +7,11 @@ class ResNetBase(Model):
         super().__init__(**kwargs)
         self.return_intermediate = return_intermediate
         self.zeropad_1 = layers.ZeroPadding2D(3)
-        self.conv1 = layers.Conv2D(64, kernel_size=7, strides=2, use_bias=False, padding='valid', name='conv1')
+        self.conv1 = layers.Conv2D(64, kernel_size=7, strides=2, name='conv1')
         self.bn = layers.BatchNormalization(axis=3)
         self.relu = layers.ReLU(name='relu')
         self.zeropad_2 = layers.ZeroPadding2D(1)
-        self.maxpool = layers.MaxPool2D(pool_size=3, strides=2, padding="valid")
+        self.maxpool = layers.MaxPool2D(pool_size=3, strides=2)
 
     def call(self, x):
         x = self.zeropad_1(x)

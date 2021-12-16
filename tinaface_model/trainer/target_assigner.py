@@ -2,8 +2,8 @@ import numpy as np
 import tensorflow as tf
 
 class TargetAssigner:
-    def __init__(self):
-        self.level = 4
+    def __init__(self, num_level):
+        self.level = num_level 
         self.iou_min = 0.35
         self.level_dict = {
             # order of level: [size, anchor stride, [anchor sizes]]
@@ -110,6 +110,7 @@ class TargetAssigner:
             find_associated_anchors_result = self.find_associated_anchors(bboxes_coor, level)
             anchor_indexes = find_associated_anchors_result[1] # (n, 2)
             anchors_coor = find_associated_anchors_result[0] # (n, 3, 4)
+
             bboxes_coor = tf.stack([bboxes_coor, bboxes_coor, bboxes_coor], axis=1) # shape(n, 3, 4)
             bboxes_area, anchors_area, inter_area = self.calculate_areas(bboxes_coor, anchors_coor)
             bboxes_coor = tf.unstack(bboxes_coor, axis=1)[0] # reshape bboxes from (n, 3, 4) -> (3, 4) for next iter
@@ -135,20 +136,25 @@ class TargetAssigner:
 
         best_iou_each_box = tf.reduce_max(iou_of_all_levels, axis=-1) # (n, )
 
-        filter_condition = best_iou_each_box > 0.35
-        anchor_indexes_all_levels = tf.boolean_mask(anchor_indexes_all_levels, filter_condition)
-        iou_of_all_levels = tf.boolean_mask(iou_of_all_levels, filter_condition)
-        best_iou_each_box = tf.boolean_mask(best_iou_each_box, filter_condition)
+        filter_condition = best_iou_each_box > 0.35 # (n - x,) x is number of invalid bbox
+        bboxes_coor = tf.boolean_mask(bboxes_coor, filter_condition)
 
-        layer_of_best_iou_each_box = tf.argmax(iou_of_all_levels, axis=-1, output_type=tf.int32) # (n, ) from 0 to 11
-        level_of_best_iou = tf.math.floordiv(layer_of_best_iou_each_box, 3) # (n, ) 0 corresponds to level 2
-        gather_index = tf.stack([tf.range(tf.shape(level_of_best_iou)[0]), tf.cast(level_of_best_iou, tf.int32)], axis=-1) # (9, 2)
-        anchor_index_of_best_iou = tf.gather_nd(anchor_indexes_all_levels, gather_index) # (9, 2)
-        scatter_index = tf.concat([anchor_index_of_best_iou, tf.reshape(layer_of_best_iou_each_box, (-1, 1))], axis=-1) # (9, 3)
+        anchor_indexes_all_levels = tf.boolean_mask(anchor_indexes_all_levels, filter_condition) # (n - x, 4, 2) 
+        iou_of_all_levels = tf.boolean_mask(iou_of_all_levels, filter_condition) # (n - x, 12)
+        best_iou_each_box = tf.boolean_mask(best_iou_each_box, filter_condition) # (n - x)
+        
+
+        layer_of_best_iou_each_box = tf.argmax(iou_of_all_levels, axis=-1, output_type=tf.int32) # (n - x, ) from 0 to 11
+        level_of_best_iou = tf.math.floordiv(layer_of_best_iou_each_box, 3) # (n - x, ) 0 corresponds to level 2
+        gather_index = tf.stack([tf.range(tf.shape(level_of_best_iou)[0]), tf.cast(level_of_best_iou, tf.int32)], axis=-1) # (n - x, 2)
+        anchor_index_of_best_iou = tf.gather_nd(anchor_indexes_all_levels, gather_index) # (n - x, 2)
+        scatter_index = tf.concat([anchor_index_of_best_iou, tf.reshape(layer_of_best_iou_each_box, (-1, 1))], axis=-1) # (n - x, 3)
+        
 
         classification_target = tf.tensor_scatter_nd_update(classification_target, scatter_index, tf.ones((bboxes_coor.shape[0],)))
         regression_target = tf.tensor_scatter_nd_update(regression_target, scatter_index, bboxes_coor)
         iouaware_target = tf.tensor_scatter_nd_update(iouaware_target, scatter_index, best_iou_each_box)
+        
 
         target_level_2_dict = {'classification': classification_target[:, :, :3],
                                'regression': regression_target[:, :, :3],
@@ -167,54 +173,3 @@ class TargetAssigner:
                                'iouaware': iouaware_target[:, :, 9:12][:20, :20]}
 
         return [target_level_2_dict, target_level_3_dict, target_level_4_dict, target_level_5_dict]
-        
-
-        
-if __name__ == '__main__':
-    import json
-    import cv2
-    with open('/Users/dzungngo/Desktop/FACE DETECTION/Data/ImageJSON/7_Cheering_Cheering_7_16.json') as f:
-        data = json.load(f)
-
-    bboxes_coor = []
-
-    for shape in data['shapes']:
-        bbox_coor = shape['points']
-        bboxes_coor.append(bbox_coor)
-
-    bboxes_coor = tf.constant(bboxes_coor)
-    bboxes_coor = tf.reshape(bboxes_coor, (-1, 4))
-    
-    # bboxes_coor = bboxes_coor[0:1]
-
-    target_assigner = TargetAssigner()
-    # print(target_assigner.get_target(bboxes_coor))
-    output_targets = target_assigner.get_target(bboxes_coor)
-    anchor_coor_test_list = []
-    for i, target in enumerate(output_targets): # for each level
-        idx = tf.where(target['classification'] == 1)
-        anchor_coor_test = tf.gather_nd(target_assigner.anchor_coordinate_all_level[i], idx)
-        anchor_coor_test_list.append(anchor_coor_test)
-
-    anchor_coor_test = tf.concat(anchor_coor_test_list, axis=0)
-    anchor_coor_test = tf.cast(anchor_coor_test, tf.int32)
-
-    image = cv2.imread('/Users/dzungngo/Desktop/FACE DETECTION/Data/Image/7_Cheering_Cheering_7_16.jpg')
-    window_name = 'Image'
-    thickness = 1
-    color1 = (255, 0, 0)
-    color2 = (0, 255, 0)
-
-    for coor in anchor_coor_test:
-        start = (int(coor[0]), int(coor[1]))
-        end = (int(coor[2]), int(coor[3]))
-        image = cv2.rectangle(image, start, end, color1, thickness)
-
-
-    for bbox in bboxes_coor:
-        start = (int(bbox[0]), int(bbox[1]))
-        end = (int(bbox[2]), int(bbox[3]))
-        image = cv2.rectangle(image, start, end, color2, thickness)
-
-    cv2.imshow(window_name, image)
-    cv2.waitKey(0)

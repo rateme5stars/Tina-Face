@@ -1,9 +1,15 @@
-from keras.layers.convolutional import ZeroPadding2D
 from keras import layers
 from keras import Model
 
 class ResNetBase(Model):
     def __init__(self, return_intermediate=False, **kwargs):
+        '''
+        Parameter
+        ---------
+        return_intermediate: bool, 
+            - true: return all blocks
+            - false: return last block
+        '''
         super().__init__(**kwargs)
         self.return_intermediate = return_intermediate
         self.zeropad_1 = layers.ZeroPadding2D(3)
@@ -33,6 +39,16 @@ class ResNetBase(Model):
 
 class BottleNeck(Model):
     def __init__(self, dim1, dim2, strides, projection=False, **kwargs):
+        '''
+        Parameter
+        ---------
+        dim1: first kernel size of bottle neck
+        dim2: second kernel size of bottle neck
+        strides: stride of each kernel
+        projection: 
+            - true: 
+            - false:
+        '''
         super().__init__(**kwargs)
         self.projection = projection
 
@@ -40,7 +56,7 @@ class BottleNeck(Model):
         self.bn1 = layers.BatchNormalization(axis=3, name='bn1')
         self.relu1 = layers.ReLU(name='relu1')
 
-        self.pad = ZeroPadding2D(1)
+        self.pad = layers.ZeroPadding2D(1)
         self.conv2 = layers.Conv2D(dim1, strides=strides, kernel_size=3, name='conv2')
         self.bn2 = layers.BatchNormalization(axis=3, name='bn2')
         self.relu2 = layers.ReLU(name='relu2')
@@ -65,6 +81,7 @@ class BottleNeck(Model):
 
         x = self.conv3(x)
         x = self.bn3(x)
+        
         if self.projection:
             identity = self.projection_conv(identity)
             identity = self.projection_bn(identity)
@@ -95,7 +112,8 @@ class Residual(Model):
 class ResNet50(ResNetBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.block2 = Residual(num_bottlenecks=3, dim1=64,dim2=256, downsampling=False)
+        self.block2 = Residual(num_bottlenecks=3, dim1=64, dim2=256, downsampling=False)
         self.block3 = Residual(num_bottlenecks=4, dim1=128, dim2=512)
         self.block4 = Residual(num_bottlenecks=6, dim1=256, dim2=1024)
         self.block5 = Residual(num_bottlenecks=3, dim1=512, dim2=2048)
+

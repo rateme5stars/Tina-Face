@@ -3,9 +3,6 @@ import tensorflow as tf
 import numpy as np
 import os
 import json 
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-
 import imgaug.augmenters as iaa
 from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
 
@@ -15,8 +12,24 @@ def np_bboxes_to_imgaug_boxes(boxes: np.ndarray, image_shape: tuple) -> Bounding
         for box in boxes
     ], shape=image_shape)
 
+def apply_augmentation(rotate: bool = False): 
+    if rotate:
+        aug =  iaa.Sequential([
+            iaa.Rotate((-10, 10)),
+            iaa.GammaContrast((0.5, 2.0), per_channel=True),
+            iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30)),
+            iaa.MultiplyHue((0.5, 1.5))
+        ])
+    else:
+        aug =  iaa.Sequential([
+            iaa.Resize({"shorter-side": 640, "longer-side": "keep-aspect-ratio"}),
+            iaa.CenterCropToFixedSize(640, 640),
+            ])
+    return aug
+
+
 class InputPipeline:
-    def __init__(self, annotation_dir: str, image_shape: tuple, augmentation_seq: iaa.Sequential = None):
+    def __init__(self, annotation_dir: str, image_shape: tuple, augmentation_seq: iaa.Sequential=None, rotate: iaa.Sequential=None):
         """
         Parameter
         ---------
@@ -28,6 +41,8 @@ class InputPipeline:
         self.H, self.W = image_shape
         self.json_image_dict = self.get_json_image_dict()
         self.augmentation_seq = augmentation_seq
+        self.rotate = rotate
+        
 
     def get_json_image_dict(self) -> Dict[str, str]:
         """
@@ -97,8 +112,23 @@ class InputPipeline:
             # data augmentation
             bbs = np_bboxes_to_imgaug_boxes(bboxes, image_arr.shape)
             image_aug, bbs_aug = self.augmentation_seq(image=image_arr, bounding_boxes=bbs)
-            bbs_aug = bbs_aug.remove_out_of_image().clip_out_of_image()
+            bbs_aug = bbs_aug.remove_out_of_image()
+
+            # handle outside bboxes
             bboxes_aug = bbs_aug.to_xyxy_array()
+            center_bboxes_aug = (bboxes_aug[:, :2] + bboxes_aug[:, 2:]) / 2 # (n, 2)
+            filter_condition = ((center_bboxes_aug > 0).all(axis=-1) & (center_bboxes_aug < 640).all(-1))
+            bboxes_aug = bboxes_aug[filter_condition]  
+            
+
+            if self.rotate != None:
+                bbs_2 = np_bboxes_to_imgaug_boxes(bboxes_aug, image_aug.shape)
+                image_aug = tf.cast(image_aug, tf.uint8).numpy()
+                image_aug, bbs_aug = self.rotate(image=image_aug, bounding_boxes=bbs_2)
+                image_aug = tf.cast(image_aug, tf.float32)
+                bboxes_aug = bbs_aug.to_xyxy_array()
+
+            # create padded bboxes
             padded_bboxes = np.zeros((100, 4), dtype=bboxes_aug.dtype)
             padded_bboxes[0, 0] = bboxes_aug.shape[0]
             padded_bboxes[1 : bboxes_aug.shape[0] + 1] = bboxes_aug
@@ -112,25 +142,5 @@ class InputPipeline:
                 tf.TensorSpec(shape=(100, 4), dtype=tf.float32))
         )
              
-# test
-# if __name__ == "__main__":
-#     H = W = 640
-#     seq = iaa.Sequential([
-#         iaa.Resize({"shorter-side": 640, "longer-side": "keep-aspect-ratio"}),
-#         iaa.CenterCropToFixedSize(W, H),
-#         iaa.Rotate((-10, 10))
-#     ])
 
-#     input_pipeline = InputPipeline('/Users/dzungngo/Desktop/Tina_Face/data/testJSON', (640, 640), seq)
-#     tf_dataset = input_pipeline.get_tf_dataset()
-#     for image_tensor, bboxes_tensor in tf_dataset:
-#         image = tf.keras.utils.array_to_img(image_tensor)
-        
-#         fig, ax = plt.subplots(1)
-#         ax.imshow(image)
-#         for coor in bboxes_tensor:
-#             rect = patches.Rectangle((coor[0], coor[1]), coor[2] - coor[0], coor[3] - coor[1], linewidth=1, edgecolor='r', facecolor="none")
-#             ax.add_patch(rect)
-#         plt.show()
-#         print(bboxes_tensor)
     

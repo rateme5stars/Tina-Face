@@ -3,7 +3,6 @@ from keras import layers
 from keras import Model
 
 
-
 class Bridge(Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -17,7 +16,7 @@ class Bridge(Model):
         bridge4 = self.conv_c4(resnet_x[2])
         bridge3 = self.conv_c3(resnet_x[1])
         bridge2 = self.conv_c2(resnet_x[0])
-        return [bridge2, bridge3, bridge4, bridge5]
+        return [bridge5, bridge4, bridge3, bridge2]
 
 
 class Downpath(Model):
@@ -34,19 +33,19 @@ class Downpath(Model):
 
     def call(self, bridges):
         p5_1 = bridges[0]
-        p5 = tf.image.resize(p5_1, [len(bridges[1][0]), len(bridges[1][0])], 
+        p5 = tf.image.resize(p5_1, [tf.shape(bridges[1])[1], tf.shape(bridges[1])[2]], 
         method='nearest', preserve_aspect_ratio=False, antialias=False, name=None)
         c4p5 = bridges[1] + p5
         c4p5 = self.pad_p5(c4p5)
         p4_1 = self.conv_p5(c4p5)
         #
-        p4 = tf.image.resize(p4_1, [len(bridges[2][0]), len(bridges[2][0])], 
+        p4 = tf.image.resize(p4_1, [tf.shape(bridges[2])[1], tf.shape(bridges[2])[2]], 
         method='nearest', preserve_aspect_ratio=False, antialias=False, name=None)
         c3p4 = bridges[2] + p4
         c3p4 = self.pad_p4(c3p4)
         p3_1 = self.conv_p4(c3p4)
         #
-        p3 = tf.image.resize(p3_1, [len(bridges[3][0]), len(bridges[3][0])], 
+        p3 = tf.image.resize(p3_1, [tf.shape(bridges[3])[1], tf.shape(bridges[3])[2]], 
         method='nearest', preserve_aspect_ratio=False, antialias=False, name=None)
         c2p3 = bridges[3] + p3
         c2p3 = self.pad_p3(c2p3)
@@ -65,3 +64,4 @@ class FCN(Model):
         bridges = self.bridge(resnet_x)
         p_block = self.downpath(bridges)
         return p_block
+

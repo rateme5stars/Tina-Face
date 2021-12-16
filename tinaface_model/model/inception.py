@@ -1,8 +1,5 @@
-import tensorflow as tf
 from keras import layers
 from keras import Model
-
-
 
 class Inception(Model):
     def __init__(self, **kwargs):

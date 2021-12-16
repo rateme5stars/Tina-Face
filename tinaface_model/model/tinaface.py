@@ -1,10 +1,9 @@
-import tensorflow as tf
 from keras import Model
-#
-from resnet50 import ResNet50
-from fcn import FCN
-from inception import Inception
-from head import Head
+from tinaface_model.model.resnet50 import ResNet50
+from tinaface_model.model.fcn import FCN
+from tinaface_model.model.inception import Inception
+from tinaface_model.model.head import Head
+
 
 
 class TinaFace(Model):
@@ -33,10 +32,4 @@ class TinaFace(Model):
         return head_output_list
 
 
-if __name__ == "__main__":
-    input_image = tf.zeros((1, 640, 640, 3))
-    tinaface = TinaFace()
-    my_output = tinaface(input_image)
-    for out in my_output:
-        for o in out:
-            print(o.shape)
+

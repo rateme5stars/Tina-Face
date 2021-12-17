@@ -11,8 +11,8 @@ def np_bboxes_to_imgaug_boxes(boxes: np.ndarray, image_shape: tuple) -> Bounding
         BoundingBox(*list(box))
         for box in boxes
     ], shape=image_shape)
-
-def apply_augmentation(rotate: bool = False): 
+ 
+def apply_augmentation(rotate): 
     if rotate:
         aug =  iaa.Sequential([
             iaa.Rotate((-10, 10)),
@@ -26,7 +26,6 @@ def apply_augmentation(rotate: bool = False):
             iaa.CenterCropToFixedSize(640, 640),
             ])
     return aug
-
 
 class InputPipeline:
     def __init__(self, annotation_dir: str, image_shape: tuple, augmentation_seq: iaa.Sequential=None, rotate: iaa.Sequential=None):
@@ -141,6 +140,3 @@ class InputPipeline:
                 tf.TensorSpec(shape=(self.H, self.W, 3), dtype=tf.float32),
                 tf.TensorSpec(shape=(100, 4), dtype=tf.float32))
         )
-             
-
-    

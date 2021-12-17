@@ -5,26 +5,26 @@ class TargetAssigner:
     def __init__(self, num_level):
         self.level = num_level 
         self.iou_min = 0.35
-        self.level_dict = {
-            # order of level: [size, anchor stride, [anchor sizes]]
-            # level 2
-            2: [160, 640//160, [4*pow(2, 4/3), 4*pow(2, 5/3), 4*pow(2, 6/3)]],
-            # level 3
-            3: [80, 640//80, [8*pow(2, 4/3), 8*pow(2, 5/3), 8*pow(2, 6/3)]],
-            # level 4
-            4: [40, 640//40, [16*pow(2, 4/3), 16*pow(2, 5/3), 16*pow(2, 6/3)]],
-            # level 5
-            5: [20, 640//20, [32*pow(2, 4/3), 32*pow(2, 5/3), 32*pow(2, 6/3)]],
-        }
+        
+        self.level_dict = {}
+        base_size = 160
+        base_anchor_size = [4, 8, 16, 32]
+        anchor_size_scales = np.array([4/3, 5/3, 6/3])
+
+        levels = range(4)
+
+        for i in levels:
+            size = base_size//pow(2, i)
+            self.level_dict[i + 2] = [size, 640//size, base_anchor_size[i]*pow(2, anchor_size_scales)]
 
         self.anchor_coordinate_all_level = []
-        for level in range(4):
+        for level in range(num_level):
             level = level + 2
             W = H = self.level_dict[level][0]
             X, Y = tf.meshgrid(tf.range(H), tf.range(W))
             index_tensor = tf.stack([X, Y], axis=-1) # shape(160, 160, 2)
             index_tensor = tf.concat([index_tensor, index_tensor], axis=-1) # shape(160, 160, 4) 
-            index_tensor = tf.reshape(index_tensor, (H, W, 1, 4))
+            index_tensor = tf.reshape(index_tensor, (H, W, 1, 4)) # (160, 160, 1, 4)
             index_tensor = tf.repeat(index_tensor, repeats=3, axis=2) # shape(160, 160, 1, 4)
             self.anchor_coordinate = tf.cast(index_tensor, tf.float32)
             init_coor = np.array([[-size/2, -(size*1.3)/2, size/2, (size*1.3)/2] for size in self.level_dict[level][2]]) + self.level_dict[level][1]/2
@@ -123,7 +123,12 @@ class TargetAssigner:
         anchor_indexes_all_levels = tf.stack(anchor_indexes_all_levels, axis=-2) # (n, 4, 2)
         return [iou_of_all_levels, anchor_indexes_all_levels] 
     
-    def get_target(self, bboxes_coor):
+    def get_target(self, bboxes_tensor_with_padding):
+        # Convert bboxes with padding to bboxes list
+        num_of_bbox = bboxes_tensor_with_padding[0][0]
+        num_of_bbox = tf.cast(num_of_bbox, dtype=tf.int32)
+        bboxes_coor = bboxes_tensor_with_padding[1 : num_of_bbox + 1, :]
+
         classification_target = tf.zeros((160, 160, 3 * self.level)) 
         regression_target = tf.zeros((160, 160, 3 * self.level, 4))
         iouaware_target = tf.zeros((160, 160, 3 * self.level))

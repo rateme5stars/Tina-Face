@@ -51,7 +51,7 @@ class Downpath(Model):
         c2p3 = self.pad_p3(c2p3)
         p2_1 = self.conv_p3(c2p3)
         #
-        return [p5_1, p4_1, p3_1, p2_1]
+        return [p2_1, p3_1, p4_1, p5_1]
 
 
 class FCN(Model):

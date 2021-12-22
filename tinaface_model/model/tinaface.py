@@ -4,19 +4,17 @@ from tinaface_model.model.fcn import FCN
 from tinaface_model.model.inception import Inception
 from tinaface_model.model.head import Head
 
-
-
 class TinaFace(Model):
     def __init__(self, num_level, **kwargs):
         super().__init__(**kwargs)
-        self.level = num_level
+        self.num_level = num_level
         self.resnet_block = ResNet50(return_intermediate=True)
         self.fcn_block = FCN()
         #
         self.inception_list = []
         self.head_list = []
-        for i in range(self.level):
-            head = Head(self.level)
+        for _ in range(self.num_level):
+            head = Head(self.num_level)
             inception = Inception()
             self.inception_list.append(inception)
             self.head_list.append(head)
@@ -26,7 +24,7 @@ class TinaFace(Model):
         fcn_output = self.fcn_block(resnet_output)
 
         head_output_list = []
-        for i in range(self.level):
+        for i in range(self.num_level):
             head_input = self.inception_list[i](fcn_output[i])
             head_output = self.head_list[i](head_input)
             head_output_list.append(head_output)

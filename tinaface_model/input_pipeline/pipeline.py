@@ -5,15 +5,16 @@ import os
 import json 
 import imgaug.augmenters as iaa
 from imgaug.augmentables.bbs import BoundingBox, BoundingBoxesOnImage
+from tinaface_model.trainer.target_assigner import TargetAssigner
 
 def np_bboxes_to_imgaug_boxes(boxes: np.ndarray, image_shape: tuple) -> BoundingBoxesOnImage:
     return BoundingBoxesOnImage([
         BoundingBox(*list(box))
         for box in boxes
     ], shape=image_shape)
- 
-def apply_augmentation(rotate): 
-    if rotate:
+
+def apply_sequence(apply_augmentation: bool): 
+    if apply_augmentation:
         aug =  iaa.Sequential([
             iaa.Rotate((-10, 10)),
             iaa.GammaContrast((0.5, 2.0), per_channel=True),
@@ -28,20 +29,22 @@ def apply_augmentation(rotate):
     return aug
 
 class InputPipeline:
-    def __init__(self, annotation_dir: str, image_shape: tuple, augmentation_seq: iaa.Sequential=None, rotate: iaa.Sequential=None):
+    def __init__(self, target_assigner: TargetAssigner, annotation_dir: str, image_shape: tuple, pre_processing: iaa.Sequential=None, augmentation: iaa.Sequential=None):
         """
         Parameter
         ---------
         annotation_dir: Absolute direction to annotation folder
         image_shape: size of output image (640x640 according to paper)
-        augmentation_seq: sequential of applied augmentation methods
+        pre_processing: sequential of applied pre-processing methods
+        augmentation: sequential of applied augmentation methods
         """
         self.annotation_dir = annotation_dir
         self.H, self.W = image_shape
         self.json_image_dict = self.get_json_image_dict()
-        self.augmentation_seq = augmentation_seq
-        self.rotate = rotate
-        
+        self.pre_processing = pre_processing
+        self.augmentation = augmentation
+        self.target_assigner = target_assigner
+
 
     def get_json_image_dict(self) -> Dict[str, str]:
         """
@@ -101,6 +104,7 @@ class InputPipeline:
         """
         # For loop each image path
         for json_path, image_path in self.json_image_dict.items():
+
             # Load image to tensor
             image_pil = tf.keras.utils.load_img(image_path)
             image_arr = tf.keras.utils.img_to_array(image_pil)
@@ -108,9 +112,9 @@ class InputPipeline:
             # load bbox to tensor
             bboxes = self.get_bbox_from_json(json_path)
 
-            # data augmentation
+            # image pre-processing
             bbs = np_bboxes_to_imgaug_boxes(bboxes, image_arr.shape)
-            image_aug, bbs_aug = self.augmentation_seq(image=image_arr, bounding_boxes=bbs)
+            image_aug, bbs_aug = self.pre_processing(image=image_arr, bounding_boxes=bbs)
             bbs_aug = bbs_aug.remove_out_of_image()
 
             # handle outside bboxes
@@ -119,11 +123,11 @@ class InputPipeline:
             filter_condition = ((center_bboxes_aug > 0).all(axis=-1) & (center_bboxes_aug < 640).all(-1))
             bboxes_aug = bboxes_aug[filter_condition]  
             
-
-            if self.rotate != None:
+            # apply augmentation
+            if self.augmentation != None:
                 bbs_2 = np_bboxes_to_imgaug_boxes(bboxes_aug, image_aug.shape)
                 image_aug = tf.cast(image_aug, tf.uint8).numpy()
-                image_aug, bbs_aug = self.rotate(image=image_aug, bounding_boxes=bbs_2)
+                image_aug, bbs_aug = self.augmentation(image=image_aug, bounding_boxes=bbs_2)
                 image_aug = tf.cast(image_aug, tf.float32)
                 bboxes_aug = bbs_aug.to_xyxy_array()
 
@@ -131,12 +135,23 @@ class InputPipeline:
             padded_bboxes = np.zeros((100, 4), dtype=bboxes_aug.dtype)
             padded_bboxes[0, 0] = bboxes_aug.shape[0]
             padded_bboxes[1 : bboxes_aug.shape[0] + 1] = bboxes_aug
-            yield image_aug, padded_bboxes
+            targets = self.target_assigner.get_target(padded_bboxes)
+
+            yield image_aug, padded_bboxes, targets
 
     def get_tf_dataset(self):
+        ratio = [1, 0.5, pow(0.5, 2), pow(0.5, 3)]
+        size = 160
         return tf.data.Dataset.from_generator(
             self.generator,
             output_signature=(
                 tf.TensorSpec(shape=(self.H, self.W, 3), dtype=tf.float32),
-                tf.TensorSpec(shape=(100, 4), dtype=tf.float32))
+                tf.TensorSpec(shape=(100, 4), dtype=tf.float32),
+                tuple({
+                    "classification": tf.TensorSpec(shape=(int(size*ratio[i]), int(size*ratio[i]), 3), dtype=tf.float32),
+                    "regression": tf.TensorSpec(shape=(int(size*ratio[i]), int(size*ratio[i]), 3, 4), dtype=tf.float32),
+                    "iouaware": tf.TensorSpec(shape=(int(size*ratio[i]), int(size*ratio[i]), 3), dtype=tf.float32)
+                } for i in range(4)) 
+            )
         )
+                

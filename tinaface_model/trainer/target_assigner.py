@@ -177,4 +177,4 @@ class TargetAssigner:
                                'regression': regression_target[:, :, 9:12][:20, :20],
                                'iouaware': iouaware_target[:, :, 9:12][:20, :20]}
 
-        return [target_level_2_dict, target_level_3_dict, target_level_4_dict, target_level_5_dict]
+        return (target_level_2_dict, target_level_3_dict, target_level_4_dict, target_level_5_dict)

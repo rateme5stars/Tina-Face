@@ -5,7 +5,7 @@ import tensorflow_addons as tfa
 from tinaface_model.input_pipeline.pipeline import InputPipeline
 from tinaface_model.trainer.target_assigner import TargetAssigner
 from tinaface_model.model.tinaface import TinaFace
-from tinaface_model.input_pipeline.pipeline import apply_augmentation
+from tinaface_model.input_pipeline.pipeline import apply_sequence
 
 
 class Trainer:
@@ -64,45 +64,58 @@ class Trainer:
         
     def valid(self):
         pass
+        output_valid_pipeline = ... # batchsize = 1
+        for image, padded_boxes, targets in output_valid_pipeline:
+            # image (1, H, W, 3)
+            model_output = self.model(image)
+            total_loss = ...
+            predicted_boxes = ...
+            metrics = ... # AP
+            # log 10 images only in valid set (optional)
+        # log average metrics and losses
+        self.log()
 
     def log(self):
         pass
 
     def train(self):
-        for epoch in range(self.epochs): # recommend: use tqdm for visualizing process
-            for batch_images, padded_bboxes in self.train_pipeline.shuffle().batch(self.batchsize):
-                for i, bbox in enumerate(padded_bboxes):
-                    target = self.target_assigner(bbox) # check if it can work with batch
+        output_train_pipeline = self.train_pipeline.get_tf_dataset().batch(self.batchsize).prefetch(buffer_size=4)
+        test_data = output_train_pipeline.take(10)
+        print(len(test_data))
+        return
+        for _ in range(self.epochs): # recommend: use tqdm for visualizing process
+            # TODO: modify the code below 
+            for batch_images, _, targets, in output_train_pipeline.shuffle(buffer_size=50):
                     with tf.GradientTape() as tape:
-                        pass
                         # forward prop
-                        model_output = self.model(batch_images[i])
+                        model_output = self.model(batch_images)
                         # get loss
-                        total_loss = self.get_total_loss(model_output=model_output, target=target)
+                        total_loss = self.get_total_loss(model_output=model_output, target=targets)
                         # back prop
                         gradients = tape.get_gradient(total_loss, tape.watched_variables())
                         self.opt.apply_gradients(zip(gradients, tape.watched_variables()))
                     # logging
                     self.log()
                 # validation loop and get validation metrics
-                self.valid()
-                # early stopping on valid loss and valid metric
+                # self.valid()
+                # save best model based on valid losses/metrics
+                # early stopping on valid loss and valid metric (optional)
 
 
 if __name__ == '__main__':
     model = TinaFace(num_level=4)
     target_assigner = TargetAssigner(num_level=4)
 
-    augmentations = [apply_augmentation(rotate=True), apply_augmentation(rotate=False)]
+    sequences = [apply_sequence(apply_augmentation=True), apply_sequence(apply_augmentation=False)]
 
     train_pipeline = InputPipeline(annotation_dir='/Users/dzungngo/Desktop/Tina_Face/data/imageJSON', 
                                    image_shape=(640, 640),
-                                   augmentation_seq=augmentations[1],
-                                   rotate=apply_augmentation[0])
+                                   pre_processing=sequences[1],
+                                   augmentation=sequences[0])
 
     valid_pipeline = InputPipeline(annotation_dir='/Users/dzungngo/Desktop/Tina_Face/data/valJSON',
                                    image_shape=(640, 640),
-                                   augmentation_seq=apply_augmentation[0])
+                                   pre_processing=sequences[0])
     batch_size = 32
     epochs = 10
     loss_weights = tf.constant([1, 1, 1], dtype=tf.float32)
@@ -117,3 +130,4 @@ if __name__ == '__main__':
                       level_loss_weights=level_loss_weights)
 
 
+    trainer.train()

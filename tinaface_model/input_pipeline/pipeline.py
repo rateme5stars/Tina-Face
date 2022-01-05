@@ -15,18 +15,18 @@ def np_bboxes_to_imgaug_boxes(boxes: np.ndarray, image_shape: tuple) -> Bounding
 
 def apply_sequence(apply_augmentation: bool): 
     if apply_augmentation:
-        aug =  iaa.Sequential([
+        sequence =  iaa.Sequential([
             iaa.Rotate((-10, 10)),
             iaa.GammaContrast((0.5, 2.0), per_channel=True),
             iaa.MultiplyAndAddToBrightness(mul=(0.5, 1.5), add=(-30, 30)),
             iaa.MultiplyHue((0.5, 1.5))
         ])
     else:
-        aug =  iaa.Sequential([
+        sequence =  iaa.Sequential([
             iaa.Resize({"shorter-side": 640, "longer-side": "keep-aspect-ratio"}),
             iaa.CenterCropToFixedSize(640, 640),
             ])
-    return aug
+    return sequence
 
 class InputPipeline:
     def __init__(self, target_assigner: TargetAssigner, annotation_dir: str, image_shape: tuple, pre_processing: iaa.Sequential=None, augmentation: iaa.Sequential=None):

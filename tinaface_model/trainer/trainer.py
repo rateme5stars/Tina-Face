@@ -81,25 +81,23 @@ class Trainer:
     def train(self):
         output_train_pipeline = self.train_pipeline.get_tf_dataset().batch(self.batchsize).prefetch(buffer_size=4)
         test_data = output_train_pipeline.take(10)
-        print(len(test_data))
-        return
+
         for _ in range(self.epochs): # recommend: use tqdm for visualizing process
-            # TODO: modify the code below 
-            for batch_images, _, targets, in output_train_pipeline.shuffle(buffer_size=50):
-                    with tf.GradientTape() as tape:
-                        # forward prop
-                        model_output = self.model(batch_images)
-                        # get loss
-                        total_loss = self.get_total_loss(model_output=model_output, target=targets)
-                        # back prop
-                        gradients = tape.get_gradient(total_loss, tape.watched_variables())
-                        self.opt.apply_gradients(zip(gradients, tape.watched_variables()))
-                    # logging
-                    self.log()
-                # validation loop and get validation metrics
-                # self.valid()
-                # save best model based on valid losses/metrics
-                # early stopping on valid loss and valid metric (optional)
+            for batch_images, _, targets, in test_data.shuffle(buffer_size=50):
+                with tf.GradientTape() as tape:
+                    # forward prop
+                    model_output = self.model(batch_images)
+                    # get loss
+                    total_loss = self.get_total_loss(model_output=model_output, target=targets)
+                    # back prop
+                    gradients = tape.get_gradient(total_loss, tape.watched_variables())
+                    self.opt.apply_gradients(zip(gradients, tape.watched_variables()))
+                # logging
+                # self.log()
+            # validation loop and get validation metrics
+            # self.valid()
+            # save best model based on valid losses/metrics
+            # early stopping on valid loss and valid metric (optional)
 
 
 if __name__ == '__main__':
@@ -108,14 +106,17 @@ if __name__ == '__main__':
 
     sequences = [apply_sequence(apply_augmentation=True), apply_sequence(apply_augmentation=False)]
 
-    train_pipeline = InputPipeline(annotation_dir='/Users/dzungngo/Desktop/Tina_Face/data/imageJSON', 
+    train_pipeline = InputPipeline(target_assigner=target_assigner,
+                                   annotation_dir='/Users/dzungngo/Desktop/Tina_Face/data/imageJSON', 
                                    image_shape=(640, 640),
                                    pre_processing=sequences[1],
                                    augmentation=sequences[0])
 
-    valid_pipeline = InputPipeline(annotation_dir='/Users/dzungngo/Desktop/Tina_Face/data/valJSON',
+    valid_pipeline = InputPipeline(target_assigner=target_assigner,
+                                   annotation_dir='/Users/dzungngo/Desktop/Tina_Face/data/valJSON',
                                    image_shape=(640, 640),
                                    pre_processing=sequences[0])
+
     batch_size = 32
     epochs = 10
     loss_weights = tf.constant([1, 1, 1], dtype=tf.float32)

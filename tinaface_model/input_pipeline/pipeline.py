@@ -117,20 +117,24 @@ class InputPipeline:
             image_aug, bbs_aug = self.pre_processing(image=image_arr, bounding_boxes=bbs)
             bbs_aug = bbs_aug.remove_out_of_image()
 
+            # apply augmentation
+            # if self.augmentation != None:
+            # NOTE (Nghia): for None comparison, always use "is None" for "is not None"
+            # Why? Faster, safer than "==" and "!="
+            # http://jaredgrubb.blogspot.com/2009/04/python-is-none-vs-none.html
+            if self.augmentation is not None:
+                # bbs_2 = np_bboxes_to_imgaug_boxes(bboxes_aug, image_aug.shape)
+                image_aug = tf.cast(image_aug, tf.uint8).numpy()
+                image_aug, bbs_aug = self.augmentation(image=image_aug, bounding_boxes=bbs_aug)
+                image_aug = tf.cast(image_aug, tf.float32)
+                bboxes_aug = bbs_aug.to_xyxy_array()
+
             # handle outside bboxes
             bboxes_aug = bbs_aug.to_xyxy_array()
             center_bboxes_aug = (bboxes_aug[:, :2] + bboxes_aug[:, 2:]) / 2 # (n, 2)
             filter_condition = ((center_bboxes_aug > 0).all(axis=-1) & (center_bboxes_aug < 640).all(-1))
             bboxes_aug = bboxes_aug[filter_condition]  
             
-            # apply augmentation
-            if self.augmentation != None:
-                bbs_2 = np_bboxes_to_imgaug_boxes(bboxes_aug, image_aug.shape)
-                image_aug = tf.cast(image_aug, tf.uint8).numpy()
-                image_aug, bbs_aug = self.augmentation(image=image_aug, bounding_boxes=bbs_2)
-                image_aug = tf.cast(image_aug, tf.float32)
-                bboxes_aug = bbs_aug.to_xyxy_array()
-
             # create padded bboxes
             padded_bboxes = np.zeros((100, 4), dtype=bboxes_aug.dtype)
             padded_bboxes[0, 0] = bboxes_aug.shape[0]
@@ -154,4 +158,19 @@ class InputPipeline:
                 } for i in range(4)) 
             )
         )
-                
+
+if __name__ == "__main__":
+    train_dir = "D:\\Work\\dataset\\internet_faces\\ImageJSON"
+    val_dir = "D:\\Work\\dataset\\internet_faces\\ValJSON"
+    sequences = [apply_sequence(apply_augmentation=True), apply_sequence(apply_augmentation=False)]
+    target_assigner = TargetAssigner(num_level=4)
+
+    train_pipeline = InputPipeline(target_assigner=target_assigner,
+                                   annotation_dir=train_dir, 
+                                   image_shape=(640, 640),
+                                   pre_processing=apply_sequence(apply_augmentation=False),
+                                   augmentation=sequences[0])
+    # NOTE (Nghia): this line should always ends with .prefetch()
+    dataset = train_pipeline.get_tf_dataset().batch(4).shuffle(512).prefetch(32)
+    for images, bboxes, target in dataset:
+        print(images.shape)

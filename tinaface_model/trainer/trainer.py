@@ -1,11 +1,14 @@
 from os import name
+
 import tensorflow as tf
 import tensorflow_addons as tfa
+from tinaface_model.input_pipeline.pipeline import (InputPipeline,
+                                                    apply_sequence)
+# NOTE (Nghia): equivalent import, but shorter, hence easier to read
+# from tinaface_model.input_pipeline import InputPipeline, apply_sequence
 
-from tinaface_model.input_pipeline.pipeline import InputPipeline
-from tinaface_model.trainer.target_assigner import TargetAssigner
 from tinaface_model.model.tinaface import TinaFace
-from tinaface_model.input_pipeline.pipeline import apply_sequence
+from tinaface_model.trainer.target_assigner import TargetAssigner
 
 
 class Trainer:
@@ -34,6 +37,7 @@ class Trainer:
         self.train_pipeline = train_pipeline
         self.valid_pipeline = valid_pipeline
 
+        # NOTE (Nghia): where is the learning rate ?
         self.opt = tf.keras.optimizers.Adam()
     
     def classification_loss(self, model_output, target):
@@ -48,7 +52,7 @@ class Trainer:
         loss = tf.keras.losses.categorical_crossentropy(y_pred=model_output, y_true=target, name='iouaware_loss')
         return loss
 
-    def loss_a_level(self, model_output, target):
+    def loss_single_level(self, model_output, target):
         c_loss = self.classification_loss(model_output=model_output[0], target=target['classification'])
         r_loss = self.regression_loss(model_output=model_output[1], target=target['regression'])
         i_loss = self.iouaware_loss(model_output=model_output[2], target=target['iouaware'])
@@ -59,7 +63,10 @@ class Trainer:
     def get_total_loss(self, model_output, target):
         total_loss = 0
         for lv in range(self.num_level): 
-            total_loss += self.loss_a_level(model_output, target) * self.level_loss_weights[lv]
+            # NOTE (Nghia): attention, model_output is a list of tensors for each level
+            # target is also a dict of multiple levels
+            # self.loss_single_level should digest only a tensor for a clear and simple software design
+            total_loss += self.loss_single_level(model_output, target) * self.level_loss_weights[lv]
         return total_loss
         
     def valid(self):
@@ -79,11 +86,12 @@ class Trainer:
         pass
 
     def train(self):
-        output_train_pipeline = self.train_pipeline.get_tf_dataset().batch(self.batchsize).prefetch(buffer_size=4)
+        output_train_pipeline = self.train_pipeline.get_tf_dataset().batch(self.batchsize)
         test_data = output_train_pipeline.take(10)
 
         for _ in range(self.epochs): # recommend: use tqdm for visualizing process
-            for batch_images, _, targets, in test_data.shuffle(buffer_size=50):
+            # NOTE (Nghia): tf dataset should ended with .prefetch()
+            for batch_images, _, targets, in test_data.shuffle(buffer_size=50).prefetch(buffer_size=4):
                 with tf.GradientTape() as tape:
                     # forward prop
                     model_output = self.model(batch_images)

@@ -124,6 +124,7 @@ class TargetAssigner:
         return [iou_of_all_levels, anchor_indexes_all_levels] 
     
     def get_target(self, bboxes_tensor_with_padding):
+        # NOTE (Nghia): more comments for a better readability
         # Convert bboxes with padding to bboxes list
         num_of_bbox = bboxes_tensor_with_padding[0][0]
         num_of_bbox = tf.cast(num_of_bbox, dtype=tf.int32)

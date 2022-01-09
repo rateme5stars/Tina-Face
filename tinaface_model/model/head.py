@@ -1,5 +1,7 @@
+import re
 from keras import layers
 from keras import Model
+import tensorflow as tf
 
 
 class Head(Model):
@@ -9,11 +11,11 @@ class Head(Model):
         self.classification_conv_list = []
         self.regression_conv_list = []
         
-        for i in range(self.level):
+        for _ in range(self.level):
             conv1x1 = layers.Conv2D(filters=256, kernel_size=1, strides=1, padding='valid')
             self.classification_conv_list.append(conv1x1)
 
-        for i in range(self.level):
+        for _ in range(self.level):
             conv1x1 = layers.Conv2D(filters=256, kernel_size=1, strides=1, padding='valid')
             self.regression_conv_list.append(conv1x1)
 
@@ -31,6 +33,7 @@ class Head(Model):
         #
         classification = self.classification_conv(classification_head_tensor)
         regression = self.regression_conv(regression_head_tensor)
+        regression = tf.reshape(regression, (-1, regression.shape[1], regression.shape[2], 3, 4))
         iou_aware = self.iou_aware_conv(regression_head_tensor)
 
         return [classification, regression, iou_aware]

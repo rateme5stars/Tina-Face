@@ -35,20 +35,20 @@ class Trainer:
         self.valid_pipeline = valid_pipeline
 
         self.opt = tf.keras.optimizers.Adam(learning_rate=lr)
+        self.focal_loss = tfa.losses.SigmoidFocalCrossEntropy(alpha=0.25, gamma=2, from_logits=True)
+        self.g_iou_loss = tfa.losses.GIoULoss()
+        self.crossentropy_loss = tf.keras.losses.CategoricalCrossentropy()
     
     def classification_loss(self, model_output, target):
-        focal_loss = tfa.losses.SigmoidFocalCrossEntropy(alpha=0.25, gamma=2, )
-        loss = focal_loss(y_pred=model_output, y_true=target)
+        loss = self.focal_loss(y_pred=model_output, y_true=target)
         return tf.reduce_mean(loss)
 
     def regression_loss(self, model_output, target):
-        g_iou_loss = tfa.losses.GIoULoss()
-        loss = g_iou_loss(y_pred=model_output, y_true=target)
+        loss = self.g_iou_loss(y_pred=model_output, y_true=target)
         return tf.reduce_mean(loss)
 
     def iouaware_loss(self, model_output, target):
-        crossentropy_loss = tf.keras.losses.CategoricalCrossentropy()
-        loss = crossentropy_loss(y_pred=model_output, y_true=target)
+        loss = self.crossentropy_loss(y_pred=model_output, y_true=target)
         return tf.reduce_mean(loss)
 
     def loss_in_single_level(self, model_output, target, lv):
@@ -85,7 +85,7 @@ class Trainer:
 
     def train(self):
         output_train_pipeline = self.train_pipeline.get_tf_dataset().batch(self.batchsize)
-        test_data = output_train_pipeline.take(10)
+        test_data = output_train_pipeline.take(1)
 
         for e in range(self.epochs): # recommend: use tqdm for visualizing process
             print(f'epoch: {e}')
@@ -95,9 +95,8 @@ class Trainer:
                     # forward prop
                     model_output = self.model(batch_images)
                     # get loss
-                    
                     total_loss = self.get_total_loss(model_output=model_output, target=targets)
-                    print(total_loss)
+                    print(float(total_loss))
                     # back prop
                     gradients = tape.gradient(total_loss, tape.watched_variables())
                     self.opt.apply_gradients(zip(gradients, tape.watched_variables()))
@@ -115,18 +114,18 @@ if __name__ == '__main__':
     sequences = [apply_sequence(apply_augmentation=True), apply_sequence(apply_augmentation=False)]
 
     train_pipeline = InputPipeline(target_assigner=target_assigner,
-                                   annotation_dir='/Users/dzungngo/Desktop/Tina_Face/data/imageJSON', 
+                                   annotation_dir='./data/imageJSON', 
                                    image_shape=(640, 640),
                                    pre_processing=sequences[1],)
                                    #augmentation=sequences[0]teta
 
     valid_pipeline = InputPipeline(target_assigner=target_assigner,
-                                   annotation_dir='/Users/dzungngo/Desktop/Tina_Face/data/valJSON',
+                                   annotation_dir='./data/valJSON',
                                    image_shape=(640, 640),
                                    pre_processing=sequences[0])
 
-    batch_size = 4
-    epochs = 6
+    batch_size = 2
+    epochs = 20
     lr = 0.0001
     loss_weights = tf.constant([1, 1, 1], dtype=tf.float32)
     level_loss_weights = tf.constant([1, 1, 1, 1], dtype=tf.float32)

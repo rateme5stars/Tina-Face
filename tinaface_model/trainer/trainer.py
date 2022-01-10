@@ -35,17 +35,46 @@ class Trainer:
         self.valid_pipeline = valid_pipeline
 
         self.opt = tf.keras.optimizers.Adam(learning_rate=lr)
+        # NOTE (Nghia): from_logits=True because there is no activation in classification head
         self.focal_loss = tfa.losses.SigmoidFocalCrossEntropy(alpha=0.25, gamma=2, from_logits=True)
         self.g_iou_loss = tfa.losses.GIoULoss()
-        self.crossentropy_loss = tf.keras.losses.CategoricalCrossentropy()
+        # NOTE (Nghia): use BinaryCrossentropy instead of CategoricalCrossentropy
+        # because CategoricalCrossentropy expects the target to be one-hot
+        # which is not in our case
+        # here we don't use from_logits=True because there is already sigmoid activation
+        # in iou aware head.
+        # I recommend to remove this activation this head.py,
+        # so that the output of iou aware head is logits and coherent with classification head
+        self.crossentropy_loss = tf.keras.losses.BinaryCrossentropy()
     
     def classification_loss(self, model_output, target):
         loss = self.focal_loss(y_pred=model_output, y_true=target)
         return tf.reduce_mean(loss)
 
+    # NOTE (Nghia):
+    # in box regression, we should combine L1 loss and GIoU loss
+    # At the begin, GIoU loss is difficult to converge due to vanishing gradient. 
+    # The GIoU loss usually works well after a certain number of train iterations.
+    # That's why in Tina Face paper, the CIoU or DIoU loss were used instead of GIoU
+    # If we use CIoU or DIoU loss, maybe L1 loss isn't necessary
+    
+    # NOTE (Nghia): IMPORTANT
+    # bounding box target should be normalized by image size
+    # so that the model would learn faster 
     def regression_loss(self, model_output, target):
-        loss = self.g_iou_loss(y_pred=model_output, y_true=target)
-        return tf.reduce_mean(loss)
+        b = target.shape[0]
+        model_output = tf.reshape(model_output, (b, -1, 3, 4))
+        target = tf.reshape(target, (b, -1, 3, 4))
+        non_null_target_filter = tf.reduce_max(target, -1) > 0
+        model_output = tf.boolean_mask(model_output, non_null_target_filter)
+        target = tf.boolean_mask(target, non_null_target_filter)
+        gloss = self.g_iou_loss(y_pred=model_output, y_true=target)
+        if tf.size(target) == 0:
+            l1loss = 0
+        else:
+            l1loss =  tf.keras.metrics.mean_absolute_error(target, model_output)
+            l1loss = tf.reduce_mean(l1loss)
+        return gloss + l1loss
 
     def iouaware_loss(self, model_output, target):
         loss = self.crossentropy_loss(y_pred=model_output, y_true=target)
@@ -125,9 +154,10 @@ if __name__ == '__main__':
                                    pre_processing=sequences[0])
 
     batch_size = 2
-    epochs = 20
+    epochs = 50
     lr = 0.0001
-    loss_weights = tf.constant([1, 1, 1], dtype=tf.float32)
+    # loss_weights = tf.constant([1, 1, 1], dtype=tf.float32)
+    loss_weights = tf.constant([0, 1, 0], dtype=tf.float32)
     level_loss_weights = tf.constant([1, 1, 1, 1], dtype=tf.float32)
 
     trainer = Trainer(model=model,

@@ -1,8 +1,7 @@
 import tensorflow as tf
 import tensorflow_addons as tfa
-from tinaface_model.input_pipeline.pipeline import (InputPipeline, apply_sequence)
-# NOTE (Nghia): equivalent import, but shorter, hence easier to read
-# from tinaface_model.input_pipeline import InputPipeline, apply_sequence
+from tinaface_model.input_pipeline import (InputPipeline, apply_sequence)
+import matplotlib.pyplot as plt
 
 from tinaface_model.model.tinaface import TinaFace
 from tinaface_model.trainer.target_assigner import TargetAssigner
@@ -82,7 +81,7 @@ class Trainer:
 
     def loss_in_single_level(self, model_output, target, lv):
         c_loss = self.classification_loss(model_output=model_output[lv][0], target=target[lv]['classification'])
-        r_loss = self.regression_loss(model_output=model_output[lv][1], target=target[lv]['regression'])
+        r_loss = self.regression_loss(model_output=model_output[lv][1]/640, target=target[lv]['regression']/640)
         i_loss = self.iouaware_loss(model_output=model_output[lv][2], target=target[lv]['iouaware'])
         single_level_loss = self.loss_weights[0] * c_loss + self.loss_weights[1] * r_loss + self.loss_weights[2] * i_loss
         return single_level_loss
@@ -95,27 +94,11 @@ class Trainer:
             # self.loss_single_level should digest only a tensor for a clear and simple software design
             total_loss += self.loss_in_single_level(model_output, target, lv) * self.level_loss_weights[lv]
         return total_loss
-        
-    def valid(self):
-        pass
-        output_valid_pipeline = ... # batchsize = 1
-        for image, padded_boxes, targets in output_valid_pipeline:
-            # image (1, H, W, 3)
-            model_output = self.model(image)
-            total_loss = ...
-            predicted_boxes = ...
-            metrics = ... # AP
-            # log 10 images only in valid set (optional)
-        # log average metrics and losses
-        self.log()
-
-    def log(self):
-        pass
 
     def train(self):
         output_train_pipeline = self.train_pipeline.get_tf_dataset().batch(self.batchsize)
         test_data = output_train_pipeline.take(1)
-
+        train_losses = []
         for e in range(self.epochs): # recommend: use tqdm for visualizing process
             print(f'epoch: {e}')
             # NOTE (Nghia): tf dataset should ended with .prefetch()
@@ -124,17 +107,50 @@ class Trainer:
                     # forward prop
                     model_output = self.model(batch_images)
                     # get loss
-                    total_loss = self.get_total_loss(model_output=model_output, target=targets)
-                    print(float(total_loss))
+                    total_train_loss = self.get_total_loss(model_output=model_output, target=targets)
+                    train_losses.append(total_train_loss)
+                    print(float(total_train_loss))
                     # back prop
-                    gradients = tape.gradient(total_loss, tape.watched_variables())
+                    gradients = tape.gradient(total_train_loss, tape.watched_variables())
                     self.opt.apply_gradients(zip(gradients, tape.watched_variables()))
                 # logging
                 # self.log()
             # validation loop and get validation metrics
-            # self.valid()
+            self.valid(alpha=0.5, threshold=0.6)
             # save best model based on valid losses/metrics
             # early stopping on valid loss and valid metric (optional)
+        plt.plot(train_losses)
+    
+    def valid(self, alpha, threshold):
+        output_valid_pipeline = self.valid_pipeline.get_tf_dataset().batch(1) # batchsize = 1
+        test_valid_data = output_valid_pipeline.take(1)
+        for images, padded_boxes, targets in test_valid_data.prefetch(buffer_size=1):
+            valid_output = self.model(images)
+            total_valid_loss = self.get_total_loss(model_output=valid_output, target=targets)
+
+            predicted_boxes = []
+            for out in valid_output:
+                score = pow(out[0], alpha) * pow(out[2], 1-alpha)
+                condition = score > threshold
+                prediction = tf.boolean_mask(out[1], condition)
+                if tf.shape(prediction)[0] != 0:
+                    predicted_boxes.append(prediction)
+        
+            predicted_boxes = tf.concat(predicted_boxes, axis=0)
+            
+            num_boxes = tf.cast(padded_boxes[0][0][0], tf.int32)
+            labels = padded_boxes[1:num_boxes + 1, :]
+            
+            metrics = self.calculate_mAP(labels=labels, predictions=predicted_boxes)
+        self.log()
+    
+    def calculate_mAP(self, labels, predictions):
+        pass
+
+    def log(self):
+        print("Logging")
+
+
 
 if __name__ == '__main__':
     model = TinaFace(num_level=4)
@@ -143,21 +159,21 @@ if __name__ == '__main__':
     sequences = [apply_sequence(apply_augmentation=True), apply_sequence(apply_augmentation=False)]
 
     train_pipeline = InputPipeline(target_assigner=target_assigner,
-                                   annotation_dir='./data/imageJSON', 
+                                   annotation_dir='data/imageJSON', 
                                    image_shape=(640, 640),
-                                   pre_processing=sequences[1],)
-                                   #augmentation=sequences[0]teta
+                                   pre_processing=sequences[1],
+                                   augmentation=sequences[0])
 
     valid_pipeline = InputPipeline(target_assigner=target_assigner,
-                                   annotation_dir='./data/valJSON',
+                                   annotation_dir='data/valJSON',
                                    image_shape=(640, 640),
-                                   pre_processing=sequences[0])
+                                   pre_processing=sequences[1])
 
-    batch_size = 2
-    epochs = 50
+    batch_size = 1
+    epochs = 1
     lr = 0.0001
     # loss_weights = tf.constant([1, 1, 1], dtype=tf.float32)
-    loss_weights = tf.constant([0, 1, 0], dtype=tf.float32)
+    loss_weights = tf.constant([1, 1, 1], dtype=tf.float32)
     level_loss_weights = tf.constant([1, 1, 1, 1], dtype=tf.float32)
 
     trainer = Trainer(model=model,

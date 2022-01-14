@@ -159,18 +159,18 @@ class InputPipeline:
             )
         )
 
-if __name__ == "__main__":
-    train_dir = "D:\\Work\\dataset\\internet_faces\\ImageJSON"
-    val_dir = "D:\\Work\\dataset\\internet_faces\\ValJSON"
-    sequences = [apply_sequence(apply_augmentation=True), apply_sequence(apply_augmentation=False)]
-    target_assigner = TargetAssigner(num_level=4)
+# if __name__ == "__main__":
+#     train_dir = "D:\\Work\\dataset\\internet_faces\\ImageJSON"
+#     val_dir = "D:\\Work\\dataset\\internet_faces\\ValJSON"
+#     sequences = [apply_sequence(apply_augmentation=True), apply_sequence(apply_augmentation=False)]
+#     target_assigner = TargetAssigner(num_level=4)
 
-    train_pipeline = InputPipeline(target_assigner=target_assigner,
-                                   annotation_dir=train_dir, 
-                                   image_shape=(640, 640),
-                                   pre_processing=apply_sequence(apply_augmentation=False),
-                                   augmentation=sequences[0])
-    # NOTE (Nghia): this line should always ends with .prefetch()
-    dataset = train_pipeline.get_tf_dataset().batch(4).shuffle(512).prefetch(32)
-    for images, bboxes, target in dataset:
-        print(images.shape)
+#     train_pipeline = InputPipeline(target_assigner=target_assigner,
+#                                    annotation_dir=train_dir, 
+#                                    image_shape=(640, 640),
+#                                    pre_processing=apply_sequence(apply_augmentation=False),
+#                                    augmentation=sequences[0])
+#     # NOTE (Nghia): this line should always ends with .prefetch()
+#     dataset = train_pipeline.get_tf_dataset().batch(4).shuffle(512).prefetch(32)
+#     for images, bboxes, target in dataset:
+#         print(images.shape)

@@ -21,7 +21,7 @@ class Head(Model):
 
         self.classification_conv = layers.Conv2D(filters=3, kernel_size=1, strides=1, padding='valid')
         self.regression_conv = layers.Conv2D(filters=12, kernel_size=1, strides=1, padding='valid')
-        self.iou_aware_conv = layers.Conv2D(filters=3, activation='sigmoid', kernel_size=1, strides=1, padding='valid')
+        self.iou_aware_conv = layers.Conv2D(filters=3, kernel_size=1, strides=1, padding='valid')
 
     def call(self, inception):
 
